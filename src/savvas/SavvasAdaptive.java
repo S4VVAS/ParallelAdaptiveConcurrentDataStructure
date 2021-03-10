@@ -29,18 +29,19 @@ public class SavvasAdaptive<E> implements Iterable<E> {
 	private ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 	private ReentrantLock evaluateLock = new ReentrantLock();
 
-	private CopyOnWriteArrayList<E> list;
-	private ConcurrentHashMap<E, E> map;
+	private CopyOnWriteArrayList<E> list = new CopyOnWriteArrayList<E>();
+	private ConcurrentHashMap<E, E> map = new ConcurrentHashMap<E, E>();
 	private State currentState;
 	private boolean switchable;
 	private boolean isSwitched = false;
 
-	private ConcurrentHashMap<E, E> changeLog = new ConcurrentHashMap<E, E>();
+	private ConcurrentHashMap<E, E> addLog = new ConcurrentHashMap<E, E>();
 	private ConcurrentHashMap<E, E> removeLog = new ConcurrentHashMap<E, E>();
 	private boolean logIsActive = false;
+	private boolean releasingLog = false;
 
 	private Evaluator evaluator = new Evaluator();
-	private Logger logger = new Logger();
+	// private Logger logger = new Logger();
 	private Thread evalThread;
 
 	public SavvasAdaptive() {
@@ -52,8 +53,6 @@ public class SavvasAdaptive<E> implements Iterable<E> {
 	}
 
 	public SavvasAdaptive(State state, boolean switchable) {
-		list = new CopyOnWriteArrayList<E>();
-		map = new ConcurrentHashMap<E, E>();
 		currentState = state;
 		this.switchable = switchable;
 	}
@@ -111,47 +110,64 @@ public class SavvasAdaptive<E> implements Iterable<E> {
 
 		if (logIsActive)
 			logAdd(element);
-		else {
-			//lock.readLock().lock();
-			switch (currentState) {
-			case LIST:
-				list.add(element);
-				break;
-			case MAP:
-				map.put(element, element);
-				break;
-			default:
-				throw new RuntimeException("Invalid internal state");
-			}
-			//lock.readLock().unlock();
-		}
+		else if (releasingLog) {
+			if (removeLog.contains(element))
+				removeLog.remove(element);
+			else if (addLog.contains(element))
+				addLog.remove(element);
+			addElement(element);
+		} else
+			addElement(element);
 		countOperation(OperationType.UPDATE);
+	}
+
+	private void addElement(E element) {
+		switch (currentState) {
+		case LIST:
+			list.add(element);
+			break;
+		case MAP:
+			map.put(element, element);
+			break;
+		default:
+			throw new RuntimeException("Invalid internal state");
+		}
 	}
 
 	public void remove(E element) { // WRITE-OPERATION-----------------------------------------------------------------------------------------------
 		if (logIsActive)
 			logRemove(element);
-		else {
-			//lock.readLock().lock();
-			switch (currentState) {
-			case LIST:
-				list.remove(element);
-				break;
-			case MAP:
-				map.remove(element);
-				break;
-			default:
-				throw new RuntimeException("Invalid internal state");
-			}
-			//lock.readLock().unlock();
-		}
+		else if (releasingLog) {
+			if (removeLog.contains(element))
+				removeLog.remove(element);
+			else if (addLog.contains(element))
+				addLog.remove(element);
+			removeElement(element);
+		} else
+			removeElement(element);
 		countOperation(OperationType.UPDATE);
 	}
 
+	private void removeElement(E element) {
+		switch (currentState) {
+		case LIST:
+			list.remove(element);
+			break;
+		case MAP:
+			map.remove(element);
+			break;
+		default:
+			throw new RuntimeException("Invalid internal state");
+		}
+	}
+
 	public boolean contains(E element) {
-		if (logIsActive && logRead(element) != null) //Check log, if not in log check DS
-			return true;
-		
+		if (logIsActive) // Check log, if not in log check DS
+			if (removeLog.contains(element))
+				return false;
+			else if (logRead(element) != null)
+				return true;
+
 		Boolean b;
 		switch (currentState) {
 		case LIST:
@@ -185,25 +201,37 @@ public class SavvasAdaptive<E> implements Iterable<E> {
 	}
 
 	private void switchDS() {
-		lock.writeLock().lock();
+		// lock.writeLock().lock();
 		isSwitched = true;
+		logIsActive = true;
+
 		switch (currentState) {
 		case LIST:
 			System.out.println("=======Switching to map=======");
 			map.clear();
 			createMap(list);
 			currentState = State.MAP;
+			list.clear();
 			break;
 		case MAP:
 			System.out.println("=======Switching to list=======");
 			list.clear();
 			list.addAll(map.values());
 			currentState = State.LIST;
+			map.clear();
 			break;
 		default:
 			throw new RuntimeException("Invalid internal state");
 		}
-		lock.writeLock().unlock();
+		// lock.writeLock().unlock();
+		releasingLog = true;
+		logIsActive = false;
+		applyLog();
+		releasingLog = false;
+	}
+
+	private void applyLog() {
+		
 	}
 
 	private void countOperation(OperationType type) {
@@ -219,31 +247,25 @@ public class SavvasAdaptive<E> implements Iterable<E> {
 			}
 		}
 	}
-	
-	
-	
+
 	private void logRemove(E elm) {
-		if (changeLog.containsKey(elm))
-			changeLog.remove(elm);
+		if (addLog.containsKey(elm))
+			addLog.remove(elm);
 		removeLog.put(elm, elm);
 	}
 
 	private void logAdd(E elm) {
 		if (removeLog.containsKey(elm))
 			removeLog.remove(elm);
-		changeLog.put(elm, elm);
+		addLog.put(elm, elm);
 	}
 
 	private E logRead(E elm) {
-		if(removeLog.contains(elm))
+		if (removeLog.contains(elm))
 			return null;
-		return changeLog.get(elm);
+		return addLog.get(elm);
 	}
 
-	
-	
-	
-	
 	public void setThreads(int threads) {
 		this.threads = threads;
 	}
