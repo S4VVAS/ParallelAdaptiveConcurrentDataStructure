@@ -62,12 +62,14 @@ public class MapTest {
 		parallel = parallel/iterations;
 		
 		
-		
+
 		
 		System.out.println( "For " + iterations + " iterations on a list with " + sizeOfDS + " elements");
 		System.out.println("Non-parallel avg time: " + nonParallel * 1000 + " ms");
 		System.out.println("Parallel avg time: " + parallel * 1000 + " ms");
-			
+		
+
+		
 		
 		
 	}

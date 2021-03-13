@@ -28,11 +28,11 @@ public class SavvasAdaptive<E> implements Iterable<E> {
 	private enum OperationType {
 		UPDATE, ITERATE, READ
 	}
+	
+	//HAVE DIFFERENT CLASS INSTANCES DEPPENDING ON STATE. CLASSES CONTAIN THE DIFFERENT STATE DEPPENDING METHODS (ELIMINATES IF STATEMENTS)
+	//SWTICH BETWEEN INSTANCES WHEN SWITCHING STATE. (METHODS MUST HAVE COMMON NAMES AND PARAMETERS)
 
 	AtomicInteger operation = new AtomicInteger(0);
-
-	// private ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
-//	private ReentrantLock evaluateLock = new ReentrantLock();
 
 	private CopyOnWriteArrayList<E> list = new CopyOnWriteArrayList<E>();
 	private ConcurrentHashMap<E, E> map = new ConcurrentHashMap<E, E>();
