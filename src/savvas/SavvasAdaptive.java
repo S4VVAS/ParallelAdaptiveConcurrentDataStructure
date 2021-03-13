@@ -6,8 +6,12 @@ import java.util.stream.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.Map;
+import java.util.Optional;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -44,6 +48,8 @@ public class SavvasAdaptive<E> implements Iterable<E> {
 	private Evaluator evaluator = new Evaluator();
 	private Thread evalThread;
 
+	private ForkJoinPool threadPool = new ForkJoinPool(100);
+
 	public SavvasAdaptive() {
 		this(State.LIST, true);
 	}
@@ -55,6 +61,7 @@ public class SavvasAdaptive<E> implements Iterable<E> {
 	public SavvasAdaptive(State state, boolean switchable) {
 		currentState = state;
 		this.switchable = switchable;
+
 	}
 
 	public void setup(E[] elementList) {
@@ -63,7 +70,7 @@ public class SavvasAdaptive<E> implements Iterable<E> {
 			list.addAll(Arrays.asList(elementList));
 			break;
 		case MAP:
-			createMap(Arrays.asList(elementList));
+			Arrays.asList(elementList).forEach(v -> map.put(v, v));
 			break;
 		default:
 			throw new RuntimeException("Invalid internal state");
@@ -162,19 +169,22 @@ public class SavvasAdaptive<E> implements Iterable<E> {
 	}
 
 	public boolean contains(E element) {
-		if (logIsActive) // Check log, if not in log check DS
-			return !logContains(element);
+		Boolean b = false;
 
-		Boolean b;
-		switch (currentState) {
-		case LIST:
-			b = list.contains(element);
-			break;
-		case MAP:
-			b = map.containsKey(element);
-			break;
-		default:
-			throw new RuntimeException("Invalid internal state");
+		if (logIsActive || releasingLog) // Check log, if not in log check DS
+			b = logContains(element);
+
+		if (!b) {
+			switch (currentState) {
+			case LIST:
+				b = list.contains(element);
+				break;
+			case MAP:
+				b = map.containsKey(element);
+				break;
+			default:
+				throw new RuntimeException("Invalid internal state");
+			}
 		}
 		countOperation(OperationType.READ);
 		return b;
@@ -206,16 +216,16 @@ public class SavvasAdaptive<E> implements Iterable<E> {
 		case LIST:
 			System.out.println("=======Switching to map=======");
 			map.clear();
-			createMap(list);
+			list.forEach(v -> map.put(v, v));
 			currentState = State.MAP;
-			list.clear();
+			// list.clear();
 			break;
 		case MAP:
 			System.out.println("=======Switching to list=======");
 			list.clear();
 			list.addAll(map.values());
 			currentState = State.LIST;
-			map.clear();
+			// map.clear();
 			break;
 		default:
 			throw new RuntimeException("Invalid internal state");
@@ -283,12 +293,7 @@ public class SavvasAdaptive<E> implements Iterable<E> {
 
 	public void setThreads(int threads) {
 		this.threads = threads;
-	}
-
-	private void createMap(List<E> elementList) {
-		Map<E, E> newMap = elementList.stream().parallel()
-				.collect(Collectors.toMap(e -> e, e -> e, (Obj1, Obj2) -> Obj1));
-		map.putAll(newMap);
+		threadPool = new ForkJoinPool(threads > 8 ? 8 : threads);
 	}
 
 	public void evaluateSwitch() {
