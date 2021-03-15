@@ -16,7 +16,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-public class SavvasAdaptive<E> implements Iterable<E> {
+public class SavvasLogAdaptive<E> implements Iterable<E> {
 
 	private static final long SWITCH_THRESHOLD = 100;
 	private int threads = 100;
@@ -50,15 +50,15 @@ public class SavvasAdaptive<E> implements Iterable<E> {
 
 	private ForkJoinPool threadPool = new ForkJoinPool(100);
 
-	public SavvasAdaptive() {
+	public SavvasLogAdaptive() {
 		this(State.LIST, true);
 	}
 
-	public SavvasAdaptive(State state) {
+	public SavvasLogAdaptive(State state) {
 		this(state, true);
 	}
 
-	public SavvasAdaptive(State state, boolean switchable) {
+	public SavvasLogAdaptive(State state, boolean switchable) {
 		currentState = state;
 		this.switchable = switchable;
 
