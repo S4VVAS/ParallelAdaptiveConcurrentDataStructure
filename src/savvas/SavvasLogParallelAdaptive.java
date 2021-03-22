@@ -2,21 +2,12 @@ package savvas;
 
 import java.util.Arrays;
 import java.util.Iterator;
-import java.util.stream.*;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedDeque;
-import java.util.Map;
-import java.util.Optional;
-import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ForkJoinPool;
-import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.ReentrantLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-public class SavvasLogAdaptive<E> implements Iterable<E> {
+public class SavvasLogParallelAdaptive<E> implements Iterable<E> {
 
 	private static final long SWITCH_THRESHOLD = 100;
 	private int threads = 100;
@@ -24,19 +15,11 @@ public class SavvasLogAdaptive<E> implements Iterable<E> {
 	public enum State {
 		LIST, MAP
 	}
-
-	public enum LogState {
-		INACTIVE, ACTIVE, RELEASE
-	}
-
+	
+	
 	private enum OperationType {
 		UPDATE, ITERATE, READ
 	}
-
-	// HAVE DIFFERENT CLASS INSTANCES DEPPENDING ON STATE. CLASSES CONTAIN THE
-	// DIFFERENT STATE DEPPENDING METHODS (ELIMINATES IF STATEMENTS)
-	// SWTICH BETWEEN INSTANCES WHEN SWITCHING STATE. (METHODS MUST HAVE COMMON
-	// NAMES AND PARAMETERS)
 
 	AtomicInteger operation = new AtomicInteger(0);
 
@@ -46,24 +29,23 @@ public class SavvasLogAdaptive<E> implements Iterable<E> {
 	private boolean switchable;
 	private boolean isSwitched = false;
 
-	private ConcurrentLinkedDeque<E> addLog = new ConcurrentLinkedDeque<E>();
-	private ConcurrentLinkedDeque<E> removeLog = new ConcurrentLinkedDeque<E>();
-	private LogState logstate;
+	private E tempVar;
+	private boolean switching = false;
 
 	private Evaluator evaluator = new Evaluator();
 	private Thread evalThread;
 
 	private ForkJoinPool threadPool = new ForkJoinPool(100);
 
-	public SavvasLogAdaptive() {
+	public SavvasLogParallelAdaptive() {
 		this(State.LIST, true);
 	}
 
-	public SavvasLogAdaptive(State state) {
+	public SavvasLogParallelAdaptive(State state) {
 		this(state, true);
 	}
 
-	public SavvasLogAdaptive(State state, boolean switchable) {
+	public SavvasLogParallelAdaptive(State state, boolean switchable) {
 		currentState = state;
 		this.switchable = switchable;
 
@@ -118,27 +100,8 @@ public class SavvasLogAdaptive<E> implements Iterable<E> {
 		return isSwitched;
 	}
 
-	public void add(E element) { // WRITE-OPERATION-----------------------------------------------------------------------------------------------
-
-		switch (logstate) {
-		case INACTIVE:
-			addElement(element);
-			break;
-		case ACTIVE:
-			logAdd(element);
-			break;
-		case RELEASE:
-			if (removeLog.contains(element))
-				removeLog.remove(element);
-			else if (addLog.contains(element))
-				addLog.remove(element);
-			addElement(element);
-			break;
-		}
-		countOperation(OperationType.UPDATE);
-	}
-
-	private void addElement(E element) {
+	public void add(E element) {
+		// lock.readLock().lock();
 		switch (currentState) {
 		case LIST:
 			list.add(element);
@@ -147,31 +110,14 @@ public class SavvasLogAdaptive<E> implements Iterable<E> {
 			map.put(element, element);
 			break;
 		default:
-			throw new RuntimeException("Invalid internal state");
+			throw new RuntimeException("Invalid state");
 		}
-	}
-
-	public void remove(E element) { // WRITE-OPERATION-----------------------------------------------------------------------------------------------
-		switch (logstate) {
-		case INACTIVE:
-			removeElement(element);
-			break;
-		case ACTIVE:
-			logRemove(element);
-			break;
-		case RELEASE:
-			if (removeLog.contains(element))
-				removeLog.remove(element);
-			else if (addLog.contains(element))
-				addLog.remove(element);
-			removeElement(element);
-			break;
-		}
-
+		// lock.readLock().unlock();
 		countOperation(OperationType.UPDATE);
 	}
 
-	private void removeElement(E element) {
+	public void remove(E element) {
+		// lock.readLock().lock();
 		switch (currentState) {
 		case LIST:
 			list.remove(element);
@@ -180,27 +126,23 @@ public class SavvasLogAdaptive<E> implements Iterable<E> {
 			map.remove(element);
 			break;
 		default:
-			throw new RuntimeException("Invalid internal state");
+			throw new RuntimeException("Invalid state");
 		}
+		// lock.readLock().unlock();
+		countOperation(OperationType.UPDATE);
 	}
 
 	public boolean contains(E element) {
-		Boolean b = false;
-
-		if (logstate != LogState.INACTIVE) // Check log, if not in log check DS
-			b = logContains(element);
-
-		if (!b) {
-			switch (currentState) {
-			case LIST:
-				b = list.contains(element);
-				break;
-			case MAP:
-				b = map.containsKey(element);
-				break;
-			default:
-				throw new RuntimeException("Invalid internal state");
-			}
+		Boolean b;
+		switch (currentState) {
+		case LIST:
+			b = list.contains(element);
+			break;
+		case MAP:
+			b = map.containsKey(element);
+			break;
+		default:
+			throw new RuntimeException("Invalid state");
 		}
 		countOperation(OperationType.READ);
 		return b;
@@ -226,7 +168,7 @@ public class SavvasLogAdaptive<E> implements Iterable<E> {
 	private void switchDS() {
 		// lock.writeLock().lock();
 		isSwitched = true;
-		logstate = LogState.ACTIVE;
+		switching = true;
 
 		switch (currentState) {
 		case LIST:
@@ -247,30 +189,30 @@ public class SavvasLogAdaptive<E> implements Iterable<E> {
 			throw new RuntimeException("Invalid internal state");
 		}
 		// lock.writeLock().unlock();
-		logstate = LogState.RELEASE;
-		applyAddLog();
-		applyRemoveLog();
-		logstate = LogState.INACTIVE;
+
+		switching = false;
 	}
 
-	private void applyAddLog() {
-		E elm = addLog.poll();
-		if (elm == null)
-			return;
-		else {
-			addElement(elm);
-			applyAddLog();
+	private void switchToList() {
+		Iterator<E> it = map.values().iterator();
+		map.forEach(1, null, null);
+		
+		while(it.hasNext()) {
+			tempVar = it.next();
+			
+			it.remove();
 		}
+		
+		for(E e: map.values()) {
+			tempVar = e;
+			map.remove(e);
+			list.add(e);
+		}
+
 	}
 
-	private void applyRemoveLog() {
-		E elm = removeLog.poll();
-		if (elm == null)
-			return;
-		else {
-			removeElement(elm);
-			applyRemoveLog();
-		}
+	private void switchToMap() {
+
 	}
 
 	private void countOperation(OperationType type) {
@@ -285,25 +227,6 @@ public class SavvasLogAdaptive<E> implements Iterable<E> {
 				break;
 			}
 		}
-	}
-
-	private void logRemove(E elm) {
-		if (addLog.contains(elm))
-			addLog.remove(elm);
-		removeLog.push(elm);
-	}
-
-	private void logAdd(E elm) {
-		if (removeLog.contains(elm))
-			removeLog.remove(elm);
-		if (!addLog.contains(elm))
-			addLog.push(elm);
-	}
-
-	private boolean logContains(E elm) {
-		if (removeLog.contains(elm))
-			return false;
-		return addLog.contains(elm);
 	}
 
 	public void setThreads(int threads) {
