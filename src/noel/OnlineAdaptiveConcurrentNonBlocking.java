@@ -29,7 +29,7 @@ public class OnlineAdaptiveConcurrentNonBlocking<E> implements Iterable<E> {
 
 	private ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 	private ReentrantLock evaluateLock = new ReentrantLock();
-	
+
 	// Använd CopyOnWriteArrayList.copy() och .equals()?
 	// samma för ConcurrentHashMap?
 	private final int MAX_TRIES = 100;
@@ -54,6 +54,7 @@ public class OnlineAdaptiveConcurrentNonBlocking<E> implements Iterable<E> {
 
 	public OnlineAdaptiveConcurrentNonBlocking(State state, boolean switchable) {
 		list = new CopyOnWriteArrayList<E>();
+		listRef = new AtomicReference<CopyOnWriteArrayList<E>>();
 		map = new ConcurrentHashMap<E, E>();
 		currentState = state;
 		this.switchable = switchable;
@@ -63,6 +64,7 @@ public class OnlineAdaptiveConcurrentNonBlocking<E> implements Iterable<E> {
 		switch (currentState) {
 		case LIST:
 			list.addAll(Arrays.asList(elementList));
+			listRef.set(list);
 			break;
 		case MAP:
 			createMap(Arrays.asList(elementList));
@@ -84,6 +86,7 @@ public class OnlineAdaptiveConcurrentNonBlocking<E> implements Iterable<E> {
 	public void clear() {
 		operation.set(0);
 		list.clear();
+		listRef.set(list);
 		map.clear();
 	}
 
@@ -127,28 +130,35 @@ public class OnlineAdaptiveConcurrentNonBlocking<E> implements Iterable<E> {
 		throw new RuntimeException("Failed to add item.");
 	}
 
-	// Ändra
 	public void remove(E element) {
-		// lock.readLock().lock();
-		switch (currentState) {
-		case LIST:
-			list.remove(element);
-			break;
-		case MAP:
-			map.remove(element);
-			break;
-		default:
-			throw new RuntimeException("Invalid state");
+		int round = 0;
+		while (round < MAX_TRIES) {
+			if (currentState.equals(State.LIST)) {
+				CopyOnWriteArrayList<E> currentList = listRef.get();
+				CopyOnWriteArrayList<E> newList = listRef.get();
+				newList.remove(element);
+				if (currentState.equals(State.LIST) && listRef.compareAndSet(currentList, newList)) {
+					countOperation(OperationType.UPDATE);
+					return;
+				}
+			} else {
+				lock.readLock().lock();
+				map.remove(element, element);
+				lock.readLock().unlock();
+				countOperation(OperationType.UPDATE);
+				return;
+			}
+			round++;
 		}
-		// lock.readLock().unlock();
-		countOperation(OperationType.UPDATE);
+		throw new RuntimeException("Failed to add item.");
 	}
 
 	public boolean contains(E element) {
 		Boolean b;
 		switch (currentState) {
 		case LIST:
-			b = list.contains(element);
+			//b = list.contains(element);
+			b = listRef.get().contains(element);
 			break;
 		case MAP:
 			b = map.containsKey(element);
@@ -165,7 +175,8 @@ public class OnlineAdaptiveConcurrentNonBlocking<E> implements Iterable<E> {
 		Iterator<E> i;
 		switch (currentState) {
 		case LIST:
-			i = list.iterator();
+			//i = list.iterator();
+			i = listRef.get().iterator();
 			break;
 		case MAP:
 			i = map.values().iterator();
@@ -179,25 +190,27 @@ public class OnlineAdaptiveConcurrentNonBlocking<E> implements Iterable<E> {
 
 	// Ändra
 	private void switchDS() {
-		// lock.writeLock().lock();
+		lock.writeLock().lock();
 		isSwitched = true;
 		switch (currentState) {
 		case LIST:
 			System.out.println("=======Switching to map=======");
 			map.clear();
-			createMap(list);
+			//createMap(list);
+			createMap(listRef.get());
 			currentState = State.MAP;
 			break;
 		case MAP:
 			System.out.println("=======Switching to list=======");
 			list.clear();
 			list.addAll(map.values());
+			listRef.set(list);
 			currentState = State.LIST;
 			break;
 		default:
 			throw new RuntimeException("Invalid state");
 		}
-		// lock.writeLock().unlock();
+		lock.writeLock().unlock();
 	}
 
 	private void countOperation(OperationType type) {
