@@ -25,7 +25,7 @@ public class SavvasLogAdaptive<E> implements Iterable<E> {
 		LIST, MAP
 	}
 
-	public enum LogState {
+	private enum LogState {
 		INACTIVE, ACTIVE, RELEASE
 	}
 

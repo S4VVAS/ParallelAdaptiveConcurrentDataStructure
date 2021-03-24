@@ -17,7 +17,7 @@ public class SavvasLogAdaptiveV2<E> implements Iterable<E> {
 		LIST, MAP
 	}
 
-	public enum LogState {
+	private enum LogState {
 		INACTIVE, ACTIVE, RELEASE
 	}
 
@@ -337,21 +337,35 @@ public class SavvasLogAdaptiveV2<E> implements Iterable<E> {
 
 		private ConcurrentLinkedDeque<E> temp = new ConcurrentLinkedDeque<E>();
 		private LogState state = LogState.INACTIVE;
+		private boolean hasChanged = false;
+		
+	
 
 		public void remove(E elm) {
 			
 			switch (state) {
 			case INACTIVE:
-				logRemove(elm);
-				break;
 			case ACTIVE:
-				
+				logRemove(elm);
+				hasChanged = true;
+				break;
+			case RELEASE: //When active, we use temp for removes
+				temp.push(elm);
 				break;
 			}
 		}
 
 		public void add(E elm) {
-
+			switch (state) {
+			case INACTIVE:
+			case RELEASE:
+				logAdd(elm);
+				hasChanged = true;
+				break;
+			case ACTIVE: //When active, we use temp for removes
+				temp.push(elm);
+				break;
+			}
 		}
 
 		public void contains(E elm) {
