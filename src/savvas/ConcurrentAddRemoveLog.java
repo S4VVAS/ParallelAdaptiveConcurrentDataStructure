@@ -59,16 +59,25 @@ public class ConcurrentAddRemoveLog<E> {
 		}
 
 	}
+	
+	public E pollAddLog() {
+		return add.poll();
+	}
+	
+	public E pollRemoveLog() {
+		return remove.poll();
+	}
 
-	private boolean isRemoved(E elm) {
+
+	public boolean isRemoved(E elm) {
 		return remove.contains(elm);
 	}
 
-	private boolean isAdded(E elm) {
+	public boolean isAdded(E elm) {
 		return add.contains(elm);
 	}
 
-	private boolean hasLoggedItems() {
+	public boolean hasLoggedItems() {
 		return !add.isEmpty() || !remove.isEmpty();
 	}
 

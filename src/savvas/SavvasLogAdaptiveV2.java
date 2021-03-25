@@ -38,14 +38,16 @@ public class SavvasLogAdaptiveV2<E> implements Iterable<E> {
 	private boolean switchable;
 	private boolean isSwitched = false;
 
-	private ConcurrentLinkedDeque<E> addLog = new ConcurrentLinkedDeque<E>();
-	private ConcurrentLinkedDeque<E> removeLog = new ConcurrentLinkedDeque<E>();
+	// private ConcurrentLinkedDeque<E> addLog = new ConcurrentLinkedDeque<E>();
+//	private ConcurrentLinkedDeque<E> removeLog = new ConcurrentLinkedDeque<E>();
+	private ConcurrentAddRemoveLog<E> switchLog = new ConcurrentAddRemoveLog<E>();
+	private ConcurrentAddRemoveLog<E> listLog = new ConcurrentAddRemoveLog<E>();
 	private LogState logstate;
 
 	private Evaluator evaluator = new Evaluator();
 	private Thread evalThread;
 
-	private ForkJoinPool threadPool = new ForkJoinPool(100);
+	//private ForkJoinPool threadPool = new ForkJoinPool(100);
 
 	public SavvasLogAdaptiveV2() {
 		this(State.LIST, true);
@@ -117,13 +119,10 @@ public class SavvasLogAdaptiveV2<E> implements Iterable<E> {
 			addElement(element);
 			break;
 		case ACTIVE:
-			logAdd(element);
+			switchLog.add(element);
 			break;
 		case RELEASE:
-			if (removeLog.contains(element))
-				removeLog.remove(element);
-			else if (addLog.contains(element))
-				addLog.remove(element);
+			switchLog.remove(element);
 			addElement(element);
 			break;
 		}
@@ -149,13 +148,10 @@ public class SavvasLogAdaptiveV2<E> implements Iterable<E> {
 			removeElement(element);
 			break;
 		case ACTIVE:
-			logRemove(element);
+			switchLog.remove(element);
 			break;
 		case RELEASE:
-			if (removeLog.contains(element))
-				removeLog.remove(element);
-			else if (addLog.contains(element))
-				addLog.remove(element);
+			switchLog.remove(element);
 			removeElement(element);
 			break;
 		}
@@ -180,7 +176,7 @@ public class SavvasLogAdaptiveV2<E> implements Iterable<E> {
 		Boolean b = false;
 
 		if (logstate != LogState.INACTIVE) // Check log, if not in log check DS
-			b = logContains(element);
+			b = switchLog.isAdded(element);
 
 		if (!b) {
 			switch (currentState) {
@@ -246,23 +242,21 @@ public class SavvasLogAdaptiveV2<E> implements Iterable<E> {
 	}
 
 	private void applyAddLog() {
-		E elm = addLog.poll();
-		if (elm == null)
-			return;
-		else {
+		E elm = switchLog.pollAddLog();
+		if (elm != null) {
 			addElement(elm);
 			applyAddLog();
 		}
+		return;
 	}
 
 	private void applyRemoveLog() {
-		E elm = removeLog.poll();
-		if (elm == null)
-			return;
-		else {
+		E elm = switchLog.pollRemoveLog();
+		if (elm != null) {
 			removeElement(elm);
 			applyRemoveLog();
 		}
+		return;
 	}
 
 	private void countOperation(OperationType type) {
@@ -277,25 +271,6 @@ public class SavvasLogAdaptiveV2<E> implements Iterable<E> {
 				break;
 			}
 		}
-	}
-
-	private void logRemove(E elm) {
-		if (addLog.contains(elm))
-			addLog.remove(elm);
-		removeLog.push(elm);
-	}
-
-	private void logAdd(E elm) {
-		if (removeLog.contains(elm))
-			removeLog.remove(elm);
-		if (!addLog.contains(elm))
-			addLog.push(elm);
-	}
-
-	private boolean logContains(E elm) {
-		if (removeLog.contains(elm))
-			return false;
-		return addLog.contains(elm);
 	}
 
 	public void setThreads(int threads) {
@@ -329,76 +304,6 @@ public class SavvasLogAdaptiveV2<E> implements Iterable<E> {
 				}
 			}
 		}
-	}
-
-	private class Log {
-		private ConcurrentLinkedDeque<E> add = new ConcurrentLinkedDeque<E>();
-		private ConcurrentLinkedDeque<E> remove = new ConcurrentLinkedDeque<E>();
-
-		private ConcurrentLinkedDeque<E> temp = new ConcurrentLinkedDeque<E>();
-		private LogState state = LogState.INACTIVE;
-		private boolean hasChanged = false;
-		
-	
-
-		public void remove(E elm) {
-			
-			switch (state) {
-			case INACTIVE:
-			case ACTIVE:
-				logRemove(elm);
-				hasChanged = true;
-				break;
-			case RELEASE: //When active, we use temp for removes
-				temp.push(elm);
-				break;
-			}
-		}
-
-		public void add(E elm) {
-			switch (state) {
-			case INACTIVE:
-			case RELEASE:
-				logAdd(elm);
-				hasChanged = true;
-				break;
-			case ACTIVE: //When active, we use temp for removes
-				temp.push(elm);
-				break;
-			}
-		}
-
-		public void contains(E elm) {
-
-		}
-
-		private void logRemove(E elm) {
-			if (add.contains(elm))
-				add.remove(elm);
-			remove.push(elm);
-		}
-
-		private void logAdd(E elm) {
-			if (remove.contains(elm))
-				remove.remove(elm);
-			if (!add.contains(elm))
-				add.push(elm);
-		}
-
-		private boolean logContains(E elm) {
-			if (remove.contains(elm))
-				return false;
-			return add.contains(elm);
-		}
-
-		public ConcurrentLinkedDeque<E> pollAdd() {
-
-		}
-
-		public ConcurrentLinkedDeque<E> pollRemove() {
-
-		}
-
 	}
 
 }
