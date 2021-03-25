@@ -89,10 +89,11 @@ public class ConcurrentAddRemoveLog<E> {
 				ConcurrentLinkedDeque<E> addC = add;
 				add.clear();
 				addLogState = State.INACTIVE;
+				addUpdate.set(false);
 
 				addC.addAll(addTemp);
 				addTemp.clear();
-				addUpdate.set(false);
+				
 				return addC;
 			}
 			addUpdate.set(false);
@@ -108,10 +109,10 @@ public class ConcurrentAddRemoveLog<E> {
 				ConcurrentLinkedDeque<E> addC = add;
 				remove.clear();
 				removeLogState = State.INACTIVE;
+				removeUpdate.set(false);
 
 				addC.addAll(addTemp);
 				addTemp.clear();
-				removeUpdate.set(false);
 				return addC;
 			}
 			removeUpdate.set(false);
