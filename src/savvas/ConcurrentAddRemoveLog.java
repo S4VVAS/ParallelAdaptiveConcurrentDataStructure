@@ -11,8 +11,8 @@ public class ConcurrentAddRemoveLog<E> {
 	private ConcurrentLinkedDeque<E> addTemp = new ConcurrentLinkedDeque<E>();
 	private ConcurrentLinkedDeque<E> removeTemp = new ConcurrentLinkedDeque<E>();
 
-	AtomicBoolean addUpdate = new AtomicBoolean(false);
-	AtomicBoolean removeUpdate = new AtomicBoolean(false);
+	private AtomicBoolean addUpdate = new AtomicBoolean(false);
+	private AtomicBoolean removeUpdate = new AtomicBoolean(false);
 
 	private State addLogState = State.INACTIVE;
 	private State removeLogState = State.INACTIVE;

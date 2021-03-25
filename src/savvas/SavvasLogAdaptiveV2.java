@@ -47,7 +47,7 @@ public class SavvasLogAdaptiveV2<E> implements Iterable<E> {
 	private Evaluator evaluator = new Evaluator();
 	private Thread evalThread;
 
-	//private ForkJoinPool threadPool = new ForkJoinPool(100);
+	private ForkJoinPool threadPool = new ForkJoinPool(100);
 
 	public SavvasLogAdaptiveV2() {
 		this(State.LIST, true);
@@ -132,7 +132,7 @@ public class SavvasLogAdaptiveV2<E> implements Iterable<E> {
 	private void addElement(E element) {
 		switch (currentState) {
 		case LIST:
-			list.add(element);
+			listLog.add(element); // Adding elements to a log improves performance of the list
 			break;
 		case MAP:
 			map.put(element, element);
@@ -162,7 +162,7 @@ public class SavvasLogAdaptiveV2<E> implements Iterable<E> {
 	private void removeElement(E element) {
 		switch (currentState) {
 		case LIST:
-			list.remove(element);
+			listLog.remove(element); // Removing elements with a log improves performance of the list
 			break;
 		case MAP:
 			map.remove(element);
@@ -182,6 +182,8 @@ public class SavvasLogAdaptiveV2<E> implements Iterable<E> {
 			switch (currentState) {
 			case LIST:
 				b = list.contains(element);
+				if (!b)
+					b = listLog.isAdded(element);
 				break;
 			case MAP:
 				b = map.containsKey(element);
@@ -199,6 +201,7 @@ public class SavvasLogAdaptiveV2<E> implements Iterable<E> {
 		Iterator<E> i;
 		switch (currentState) {
 		case LIST:
+			applyListLog();
 			i = list.iterator();
 			break;
 		case MAP:
@@ -239,6 +242,7 @@ public class SavvasLogAdaptiveV2<E> implements Iterable<E> {
 		applyAddLog();
 		applyRemoveLog();
 		logstate = LogState.INACTIVE;
+		applyListLog();
 	}
 
 	private void applyAddLog() {
@@ -257,6 +261,16 @@ public class SavvasLogAdaptiveV2<E> implements Iterable<E> {
 			applyRemoveLog();
 		}
 		return;
+	}
+	
+	private void applyListLog(){
+		ConcurrentLinkedDeque<E> add = listLog.getAndClearAddLog();
+		if(add != null)
+			list.addAll(add);
+		
+		ConcurrentLinkedDeque<E> remove =  listLog.getAndClearRemoveLog();
+		if(remove != null)
+			list.removeAll(remove);
 	}
 
 	private void countOperation(OperationType type) {
