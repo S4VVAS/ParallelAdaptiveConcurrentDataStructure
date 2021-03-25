@@ -42,7 +42,7 @@ public class SavvasLogAdaptiveV2<E> implements Iterable<E> {
 //	private ConcurrentLinkedDeque<E> removeLog = new ConcurrentLinkedDeque<E>();
 	private ConcurrentAddRemoveLog<E> switchLog = new ConcurrentAddRemoveLog<E>();
 	private ConcurrentAddRemoveLog<E> listLog = new ConcurrentAddRemoveLog<E>();
-	private LogState logstate;
+	private LogState logstate = LogState.INACTIVE;
 
 	private Evaluator evaluator = new Evaluator();
 	private Thread evalThread;

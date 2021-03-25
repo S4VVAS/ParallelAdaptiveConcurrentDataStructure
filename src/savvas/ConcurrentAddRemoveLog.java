@@ -27,7 +27,7 @@ public class ConcurrentAddRemoveLog<E> {
 		case INACTIVE:
 			logRemove(elm);
 			break;
-		case ACTIVE: // When active, we use temp for removes
+		case ACTIVE: // When active, we use removeTemp for removes
 			removeTemp.push(elm);
 			break;
 		}
@@ -38,7 +38,7 @@ public class ConcurrentAddRemoveLog<E> {
 		case INACTIVE:
 			logAdd(elm);
 			break;
-		case ACTIVE: // When active, we use temp for removes
+		case ACTIVE: // When active, we use addTemp for adds
 			addTemp.push(elm);
 			break;
 		}
@@ -82,7 +82,7 @@ public class ConcurrentAddRemoveLog<E> {
 	}
 
 	public ConcurrentLinkedDeque<E> getAndClearAddLog() { // Returns null if unsuccessful/ no log items available
-		if (!addUpdate.compareAndExchange(false, true)) { // compareAndExchange: Returns false if it succeeds to change
+		if (!addUpdate.compareAndSet(false, true)) { // compareAndExchange: Returns false if it succeeds to change (J8 compareAndSet)
 															// it to true.
 			if (!add.isEmpty()) {
 				addLogState = State.ACTIVE;
@@ -101,8 +101,8 @@ public class ConcurrentAddRemoveLog<E> {
 	}
 
 	public ConcurrentLinkedDeque<E> getAndClearRemoveLog() { // Returns null if unsuccessful/ no log items available
-		if (!removeUpdate.compareAndExchange(false, true)) { // compareAndExchange: Returns false if it succeeds to
-																// change it to true.
+		if (!removeUpdate.compareAndSet(false, true)) { // compareAndExchange: Returns false if it succeeds to
+																// change it to true. (J8 compareAndSet)
 			if (!remove.isEmpty()) {
 				removeLogState = State.ACTIVE;
 				ConcurrentLinkedDeque<E> addC = add;
