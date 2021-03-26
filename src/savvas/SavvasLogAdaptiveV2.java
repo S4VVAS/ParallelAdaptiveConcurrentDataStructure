@@ -223,6 +223,7 @@ public class SavvasLogAdaptiveV2<E> implements Iterable<E> {
 
 		switch (currentState) {
 		case LIST:
+			applyListLog();
 			parallelCreateMap(list);
 			currentState = State.MAP;
 			list.clear();
@@ -239,7 +240,6 @@ public class SavvasLogAdaptiveV2<E> implements Iterable<E> {
 		applyAddLog();
 		applyRemoveLog();
 		logstate = LogState.INACTIVE;
-		applyListLog();
 	}
 
 	private void parallelCreateMap(List<E> elementList) {
