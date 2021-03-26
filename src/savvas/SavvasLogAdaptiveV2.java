@@ -218,31 +218,23 @@ public class SavvasLogAdaptiveV2<E> implements Iterable<E> {
 	}
 
 	private void switchDS() {
-		// lock.writeLock().lock();
 		isSwitched = true;
 		logstate = LogState.ACTIVE;
 
 		switch (currentState) {
 		case LIST:
-			System.out.println("=======Switching to map=======");
-			map.clear();
-//			list.forEach(v -> map.put(v, v));
 			parallelCreateMap(list);
-//			map.putAll(parallelCreateMap(list));
 			currentState = State.MAP;
-			// list.clear();
+			list.clear();
 			break;
 		case MAP:
-			System.out.println("=======Switching to list=======");
-			list.clear();
 			list.addAll(map.values());
 			currentState = State.LIST;
-			// map.clear();
+			map.clear();
 			break;
 		default:
 			throw new RuntimeException("Invalid internal state");
 		}
-		// lock.writeLock().unlock();
 		logstate = LogState.RELEASE;
 		applyAddLog();
 		applyRemoveLog();
@@ -251,24 +243,12 @@ public class SavvasLogAdaptiveV2<E> implements Iterable<E> {
 	}
 
 	private void parallelCreateMap(List<E> elementList) {
-		Map<E, E> newMap = elementList.stream().parallel().collect(ConcurrentHashMap<E, E>::new, (map, e) -> {
+		map = elementList.stream().parallel().collect(ConcurrentHashMap<E, E>::new, (map, e) -> {
 			map.put(e, e);
 		}, (map, eMp) -> { // it will combine parallel map result
 			map.putAll(eMp);
 		});
-		map.putAll(newMap);
 	}
-
-//	private ConcurrentHashMap<E, E> parallelCreateMap(List<E> elementList) {
-//		ConcurrentHashMap<E, E> newMap = elementList.stream().parallel().collect(ConcurrentHashMap<E, E>::new,
-//				(map, e) -> {
-//					map.put(e, e);
-//				}, (map, eMp) -> { // it will combine parallel map result
-//					map.putAll(eMp);
-//				});
-//		// map.putAll(newMap);
-//		return newMap;
-//	}
 
 	private void applyAddLog() {
 		E elm = switchLog.pollAddLog();
