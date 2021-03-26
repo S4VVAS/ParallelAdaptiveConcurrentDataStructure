@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -243,11 +244,21 @@ public class SavvasLogAdaptiveV2<E> implements Iterable<E> {
 	}
 
 	private void parallelCreateMap(List<E> elementList) {
+		try {
+			map = threadPool.submit(() -> elementList.parallelStream().collect(ConcurrentHashMap<E, E>::new, (map, e) -> 
+			{map.put(e, e);}, (map, eMp) -> {map.putAll(eMp);})).get();
+		} catch (InterruptedException e1) {
+			e1.printStackTrace();
+		} catch (ExecutionException e1) {
+			e1.printStackTrace();
+		}
+		
+		/*
 		map = elementList.stream().parallel().collect(ConcurrentHashMap<E, E>::new, (map, e) -> {
 			map.put(e, e);
 		}, (map, eMp) -> { // it will combine parallel map result
 			map.putAll(eMp);
-		});
+		});*/
 	}
 
 	private void applyAddLog() {
@@ -323,6 +334,19 @@ public class SavvasLogAdaptiveV2<E> implements Iterable<E> {
 				}
 			}
 		}
+	}
+	
+	private class Task implements Runnable{
+		
+		
+
+		@Override
+		public void run() {
+			
+			
+		}
+		
+		
 	}
 
 }
