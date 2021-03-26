@@ -2,11 +2,14 @@ package savvas;
 
 import java.util.Arrays;
 import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 public class SavvasLogAdaptiveV2<E> implements Iterable<E> {
 
@@ -223,7 +226,9 @@ public class SavvasLogAdaptiveV2<E> implements Iterable<E> {
 		case LIST:
 			System.out.println("=======Switching to map=======");
 			map.clear();
-			list.forEach(v -> map.put(v, v));
+//			list.forEach(v -> map.put(v, v));
+			parallelCreateMap(list);
+//			map.putAll(parallelCreateMap(list));
 			currentState = State.MAP;
 			// list.clear();
 			break;
@@ -245,6 +250,26 @@ public class SavvasLogAdaptiveV2<E> implements Iterable<E> {
 		applyListLog();
 	}
 
+	private void parallelCreateMap(List<E> elementList) {
+		Map<E, E> newMap = elementList.stream().parallel().collect(ConcurrentHashMap<E, E>::new, (map, e) -> {
+			map.put(e, e);
+		}, (map, eMp) -> { // it will combine parallel map result
+			map.putAll(eMp);
+		});
+		map.putAll(newMap);
+	}
+
+//	private ConcurrentHashMap<E, E> parallelCreateMap(List<E> elementList) {
+//		ConcurrentHashMap<E, E> newMap = elementList.stream().parallel().collect(ConcurrentHashMap<E, E>::new,
+//				(map, e) -> {
+//					map.put(e, e);
+//				}, (map, eMp) -> { // it will combine parallel map result
+//					map.putAll(eMp);
+//				});
+//		// map.putAll(newMap);
+//		return newMap;
+//	}
+
 	private void applyAddLog() {
 		E elm = switchLog.pollAddLog();
 		if (elm != null) {
@@ -262,14 +287,14 @@ public class SavvasLogAdaptiveV2<E> implements Iterable<E> {
 		}
 		return;
 	}
-	
-	private void applyListLog(){
+
+	private void applyListLog() {
 		ConcurrentLinkedDeque<E> add = listLog.getAndClearAddLog();
-		if(add != null)
+		if (add != null)
 			list.addAll(add);
-		
-		ConcurrentLinkedDeque<E> remove =  listLog.getAndClearRemoveLog();
-		if(remove != null)
+
+		ConcurrentLinkedDeque<E> remove = listLog.getAndClearRemoveLog();
+		if (remove != null)
 			list.removeAll(remove);
 	}
 
