@@ -5,13 +5,12 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
-public class SavvasLogAdaptiveV2<E> implements Iterable<E> {
+public class SavvasLogAdaptiveV2NoListLog<E> implements Iterable<E> {
 
 	private static final long SWITCH_THRESHOLD = 100;
 	private int threads = 100;
@@ -44,21 +43,20 @@ public class SavvasLogAdaptiveV2<E> implements Iterable<E> {
 	// private ConcurrentLinkedDeque<E> addLog = new ConcurrentLinkedDeque<E>();
 //	private ConcurrentLinkedDeque<E> removeLog = new ConcurrentLinkedDeque<E>();
 	private ConcurrentAddRemoveLog<E> switchLog = new ConcurrentAddRemoveLog<E>();
-	private ConcurrentAddRemoveLog<E> listLog = new ConcurrentAddRemoveLog<E>();
 	private LogState logstate = LogState.INACTIVE;
 
 	private Evaluator evaluator = new Evaluator();
 	private Thread evalThread;
 
-	public SavvasLogAdaptiveV2() {
+	public SavvasLogAdaptiveV2NoListLog() {
 		this(State.LIST, true);
 	}
 
-	public SavvasLogAdaptiveV2(State state) {
+	public SavvasLogAdaptiveV2NoListLog(State state) {
 		this(state, true);
 	}
 
-	public SavvasLogAdaptiveV2(State state, boolean switchable) {
+	public SavvasLogAdaptiveV2NoListLog(State state, boolean switchable) {
 		currentState = state;
 		this.switchable = switchable;
 
@@ -133,7 +131,7 @@ public class SavvasLogAdaptiveV2<E> implements Iterable<E> {
 	private void addElement(E element) {
 		switch (currentState) {
 		case LIST:
-			listLog.add(element); // Adding elements to a log improves performance of the list
+			list.add(element);
 			break;
 		case MAP:
 			map.put(element, element);
@@ -163,7 +161,7 @@ public class SavvasLogAdaptiveV2<E> implements Iterable<E> {
 	private void removeElement(E element) {
 		switch (currentState) {
 		case LIST:
-			listLog.remove(element); // Removing elements with a log improves performance of the list
+			list.remove(element);
 			break;
 		case MAP:
 			map.remove(element);
@@ -183,8 +181,6 @@ public class SavvasLogAdaptiveV2<E> implements Iterable<E> {
 			switch (currentState) {
 			case LIST:
 				b = list.contains(element);
-				if (!b)
-					b = listLog.isAdded(element);
 				break;
 			case MAP:
 				b = map.containsKey(element);
@@ -202,7 +198,6 @@ public class SavvasLogAdaptiveV2<E> implements Iterable<E> {
 		Iterator<E> i;
 		switch (currentState) {
 		case LIST:
-			applyListLog();
 			i = list.iterator();
 			break;
 		case MAP:
@@ -221,7 +216,6 @@ public class SavvasLogAdaptiveV2<E> implements Iterable<E> {
 
 		switch (currentState) {
 		case LIST:
-			applyListLog();
 			parallelCreateMap(list);
 			currentState = State.MAP;
 			list.clear();
@@ -263,15 +257,6 @@ public class SavvasLogAdaptiveV2<E> implements Iterable<E> {
 		return;
 	}
 
-	private void applyListLog() {
-		ConcurrentLinkedDeque<E> add = listLog.getAndClearAddLog();
-		if (add != null)
-			list.addAll(add);
-
-		ConcurrentLinkedDeque<E> remove = listLog.getAndClearRemoveLog();
-		if (remove != null)
-			list.removeAll(remove);
-	}
 
 	private void countOperation(OperationType type) {
 		if (switchable) {
