@@ -68,7 +68,6 @@ public class ConcurrentAddRemoveLog<E> {
 		return remove.poll();
 	}
 
-
 	public boolean isRemoved(E elm) {
 		return remove.contains(elm);
 	}

@@ -240,20 +240,16 @@ public class SavvasLogAdaptiveV2NoListLog<E> implements Iterable<E> {
 	}
 
 	private void applyAddLog() {
-		E elm = switchLog.pollAddLog();
-		if (elm != null) {
+		E elm;
+		while(null != (elm = switchLog.pollRemoveLog())) 
 			addElement(elm);
-			applyAddLog();
-		}
 		return;
 	}
 
 	private void applyRemoveLog() {
-		E elm = switchLog.pollRemoveLog();
-		if (elm != null) {
+		E elm;
+		while(null != (elm = switchLog.pollRemoveLog())) 
 			removeElement(elm);
-			applyRemoveLog();
-		}
 		return;
 	}
 
