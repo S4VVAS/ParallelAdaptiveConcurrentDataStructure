@@ -1,4 +1,4 @@
-package savvas;
+package savvas_old;
 
 import java.util.Arrays;
 import java.util.Iterator;
@@ -7,9 +7,10 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+
+import savvas.ConcurrentAddRemoveLog;
 
 public class SavvasLogAdaptiveV2<E> implements Iterable<E> {
 

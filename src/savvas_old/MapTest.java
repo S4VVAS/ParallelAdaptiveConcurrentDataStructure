@@ -1,4 +1,4 @@
-package savvas;
+package savvas_old;
 
 import java.util.List;
 import java.util.Map;
@@ -23,11 +23,7 @@ public class MapTest {
 		
 	
 
-			List<CompletableFuture<String>> list = list.stream()
-			    .map(line -> CompletableFuture.supplyAsync((line) -> (line), fjp))
-			    .collect(Collectors.toList());
-			list.stream().map(CompletableFuture::join)
-			    .forEach(System.out::println);
+		
 		
 		//threadPool = new ForkJoinPool(100);
 		try {
@@ -74,6 +70,15 @@ public class MapTest {
 	}*/
 
 	public static void main(String[] args) {
+		
+		int ir = 100;
+		
+		while(0 < (ir = ir - 1)) {
+			System.out.println(ir);
+		}
+		System.out.println("HEHHE");
+		
+		
 		MapTest m = new MapTest();
 		int iterations = 100000;
 		int sizeOfDS = 300000;
