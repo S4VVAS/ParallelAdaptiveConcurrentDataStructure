@@ -170,10 +170,14 @@ public class SavvasParallelAdaptive<E> implements Iterable<E> {
 	private void removeElement(E element) {
 		switch (currentState) {
 		case LIST:
-			if (logstate == LogState.RELEASE && doNotApplyListLogRemove)
+			if (logstate != LogState.RELEASE)
 				list.remove(element);
-			else
-				listApplyLog.remove(element);
+			else {
+				if (!doNotApplyListLogAdd)
+					list.remove(element);
+				else
+					listApplyLog.remove(element);
+			}
 			break;
 		case MAP:
 			map.remove(element);
