@@ -127,10 +127,7 @@ public class SavvasParallelAdaptive<E>  implements Iterable<E> {
 				break;
 			case RELEASE:
 				switchLog.remove(element);
-				if(doNotApplyListLogAdd)
-					addElement(element);
-				else 
-					listApplyLog.add(element);
+				addElement(element);
 				break;
 			}
 			countOperation(OperationType.UPDATE);
@@ -139,7 +136,10 @@ public class SavvasParallelAdaptive<E>  implements Iterable<E> {
 		private void addElement(E element) {
 			switch (currentState) {
 			case LIST:
-				list.add(element);
+				if(doNotApplyListLogAdd)
+					list.add(element);
+				else 
+					listApplyLog.add(element);
 				break;
 			case MAP:
 				map.put(element, element);
@@ -159,20 +159,19 @@ public class SavvasParallelAdaptive<E>  implements Iterable<E> {
 				break;
 			case RELEASE:
 				switchLog.remove(element);
-				if(doNotApplyListLogRemove)
-					removeElement(element);
-				else 
-					listApplyLog.remove(element);
+				removeElement(element);
 				break;
 			}
-
 			countOperation(OperationType.UPDATE);
 		}
 
 		private void removeElement(E element) {
 			switch (currentState) {
 			case LIST:
-				list.remove(element);
+				if(doNotApplyListLogRemove)
+					list.remove(element);
+				else 
+					listApplyLog.remove(element);
 				break;
 			case MAP:
 				map.remove(element);
