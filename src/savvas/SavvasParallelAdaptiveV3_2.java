@@ -3,10 +3,12 @@ package savvas;
 //Version 3.2 of SavvasLogAdaptiveV2NoListLog
 
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
@@ -249,7 +251,9 @@ public class SavvasParallelAdaptiveV3_2<E> implements Iterable<E> {
 		E elm;
 		while (null != (elm = switchLog.pollRemoveLog()))
 			listApplyLog.add(elm);
-		list.addAll(listApplyLog.getAndClearAddLog());
+		ConcurrentLinkedDeque<E> addLog = listApplyLog.getAndClearAddLog();
+		if (addLog != null)
+			list.addAll(listApplyLog.getAndClearAddLog());
 	}
 
 	private void applyRemoveLogMap() {
@@ -262,7 +266,9 @@ public class SavvasParallelAdaptiveV3_2<E> implements Iterable<E> {
 		E elm;
 		while (null != (elm = switchLog.pollRemoveLog()))
 			listApplyLog.remove(elm);
-		list.removeAll(listApplyLog.getAndClearRemoveLog());
+		ConcurrentLinkedDeque<E> remLog = listApplyLog.getAndClearRemoveLog();
+		if (remLog != null)
+			list.removeAll(remLog);
 	}
 
 	private void countOperation(OperationType type) {
