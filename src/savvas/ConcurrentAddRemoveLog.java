@@ -43,6 +43,13 @@ public class ConcurrentAddRemoveLog<E> {
 			break;
 		}
 	}
+	
+	public void clear(){
+		add.clear();
+		remove.clear();
+		addTemp.clear();
+		removeTemp.clear();
+	}
 
 	private void logRemove(E elm) {
 		if (add.contains(elm))
@@ -59,6 +66,7 @@ public class ConcurrentAddRemoveLog<E> {
 		}
 
 	}
+	
 	
 	public E pollAddLog() {
 		return add.poll();

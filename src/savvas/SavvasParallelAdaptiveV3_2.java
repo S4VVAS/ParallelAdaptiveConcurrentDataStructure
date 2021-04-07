@@ -32,8 +32,8 @@ public class SavvasParallelAdaptiveV3_2<E> implements Iterable<E> {
 
 	AtomicInteger operation = new AtomicInteger(0);
 
-	private CopyOnWriteArrayList<E> list = new CopyOnWriteArrayList<E>();
-	private ConcurrentHashMap<E, E> map = new ConcurrentHashMap<E, E>();
+	private CopyOnWriteArrayList<E> list;
+	private ConcurrentHashMap<E, E> map;
 	private State currentState;
 	private boolean switchable;
 	private boolean isSwitched = false;
@@ -54,26 +54,26 @@ public class SavvasParallelAdaptiveV3_2<E> implements Iterable<E> {
 	}
 
 	public SavvasParallelAdaptiveV3_2(State state, boolean switchable) {
+		list = new CopyOnWriteArrayList<E>();
+	    map = new ConcurrentHashMap<E, E>();
 		currentState = state;
 		this.switchable = switchable;
 	}
 
-	public void setup(E[] elementList) {
-		switch (currentState) {
-		case LIST:
-			list.addAll(Arrays.asList(elementList));
-			break;
-		case MAP:
-			Arrays.asList(elementList).forEach(v -> map.put(v, v));
-			break;
-		default:
-			throw new RuntimeException("Invalid internal state");
-		}
-		if (switchable) {
-			evalThread = new Thread(evaluator);
-			evalThread.start();
-		}
-	}
+    public void setup(E[] elementList) {
+        switch(currentState){
+            case LIST:
+                list.addAll(Arrays.asList(elementList));
+                break;
+            case MAP:
+            	parallelCreateMap(Arrays.asList(elementList));
+				break;
+        }
+        if (switchable) {
+            evalThread = new Thread(evaluator);
+            evalThread.start();
+        }
+    }
 
 	public void stop() {
 		try {
@@ -84,6 +84,8 @@ public class SavvasParallelAdaptiveV3_2<E> implements Iterable<E> {
 
 	public void clear() {
 		operation.set(0);
+		switchLog.clear();
+		listApplyLog.clear();
 		list.clear();
 		map.clear();
 	}
@@ -293,11 +295,9 @@ public class SavvasParallelAdaptiveV3_2<E> implements Iterable<E> {
 	}
 
 	public void evaluateSwitch() {
-		if ((operation.get() > SWITCH_THRESHOLD && currentState == State.MAP)
-				|| (currentState == State.MAP && threads <= 8)) {
+		if ((operation.get() > SWITCH_THRESHOLD && currentState == State.MAP) || (currentState == State.MAP && threads <= 8)) {
 			switchDS();
 		} else if (operation.get() < -SWITCH_THRESHOLD && currentState == State.LIST && threads > 8) {
-			System.out.println("THREADS: " + threads);
 			switchDS();
 		}
 		operation.set(0);
