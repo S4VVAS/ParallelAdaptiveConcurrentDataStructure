@@ -4,7 +4,6 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.stream.*;
 
-import savvas.SavvasParallelAdaptiveV4.LogState;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
@@ -109,9 +108,17 @@ public class SavvasOnlineAdaptiveModif<E> implements Iterable<E> {
 	public void add(E element) {
 		switch (logState) {
 		case INACTIVE:
-		case ACTIVE:
-		case RELEASE:
+			logState = LogState.ACTIVE;
 			addElm(element);
+			break;
+		case ACTIVE:
+			logState = LogState.RELEASE;
+			addElm(element);
+			break;
+		case RELEASE:
+			logState = LogState.INACTIVE;
+			addElm(element);
+			break;
 		}
 	}
 
@@ -134,9 +141,17 @@ public class SavvasOnlineAdaptiveModif<E> implements Iterable<E> {
 	public void remove(E element) {
 		switch (logState) {
 		case INACTIVE:
+			removeElm(element);
+			logState = LogState.ACTIVE;
+			break;
 		case ACTIVE:
+			removeElm(element);
+			logState = LogState.RELEASE;
+			break;
 		case RELEASE:
 			removeElm(element);
+			logState = LogState.INACTIVE;
+			break;
 		}
 	}
 
@@ -157,7 +172,7 @@ public class SavvasOnlineAdaptiveModif<E> implements Iterable<E> {
 	}
 
 	public boolean contains(E element) {
-		Boolean b;
+		Boolean b = false;
 
 		if (logState != LogState.INACTIVE)
 			b = false;
