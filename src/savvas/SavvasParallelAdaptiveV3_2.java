@@ -215,24 +215,23 @@ public class SavvasParallelAdaptiveV3_2<E> implements Iterable<E> {
 			parallelCreateMap(list);
 			currentState = State.MAP;
 			list.clear();
+
+			applyAddLogMap();
+			applyRemoveLogMap();
+
 			break;
 		case MAP:
 			list.addAll(map.values());
 			currentState = State.LIST;
 			map.clear();
+
+			applyAddLogList();
+			applyRemoveLogList();
+
 			break;
 		default:
 			throw new RuntimeException("Invalid internal state");
 		}
-		logstate = LogState.RELEASE;
-		if (currentState == State.MAP) {
-			applyAddLogMap();
-			applyRemoveLogMap();
-		} else {
-			applyAddLogList();
-			applyRemoveLogList();
-		}
-		logstate = LogState.INACTIVE;
 	}
 
 	private void parallelCreateMap(List<E> elementList) {
@@ -242,12 +241,14 @@ public class SavvasParallelAdaptiveV3_2<E> implements Iterable<E> {
 	}
 
 	private void applyAddLogMap() {
+		logstate = LogState.RELEASE;
 		E elm;
 		while (null != (elm = switchLog.pollRemoveLog()))
 			addElement(elm);
 	}
 
 	private void applyAddLogList() {
+		logstate = LogState.RELEASE;
 		E elm;
 		while (null != (elm = switchLog.pollRemoveLog()))
 			listApplyLog.add(elm);
@@ -260,6 +261,7 @@ public class SavvasParallelAdaptiveV3_2<E> implements Iterable<E> {
 		E elm;
 		while (null != (elm = switchLog.pollRemoveLog()))
 			removeElement(elm);
+		logstate = LogState.INACTIVE;
 	}
 
 	private void applyRemoveLogList() {
@@ -269,6 +271,7 @@ public class SavvasParallelAdaptiveV3_2<E> implements Iterable<E> {
 		ConcurrentLinkedDeque<E> remLog = listApplyLog.getAndClearRemoveLog();
 		if (remLog != null)
 			list.removeAll(remLog);
+		logstate = LogState.INACTIVE;
 	}
 
 	private void countOperation(OperationType type) {
