@@ -1,233 +1,323 @@
 package savvas;
 
+//Version 3.2 of SavvasLogAdaptiveV2NoListLog
+
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Iterator;
-import java.util.stream.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.Map;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.ReentrantLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
-
+import java.util.stream.Collectors;
 
 public class SavvasParallelAdaptiveV4<E> implements Iterable<E> {
 
-    private static final long SWITCH_THRESHOLD = 100;
-    private int threads = 100;
+	private static final long SWITCH_THRESHOLD = 100;
+	private int threads = 100;
 
-    public enum State{LIST, MAP}
-    private enum OperationType{UPDATE, ITERATE, READ}
-    AtomicInteger operation = new AtomicInteger(0);
+	public enum State {
+		LIST, MAP
+	}
 
-    private ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
-    private ReentrantLock evaluateLock = new ReentrantLock();
+	private enum LogState {
+		INACTIVE, ACTIVE, RELEASE
+	}
 
-    private CopyOnWriteArrayList<E> list;
-    private ConcurrentHashMap<E, E> map;
-    private State currentState;
-    private boolean switchable;
-    private boolean isSwitched = false;
+	private enum OperationType {
+		UPDATE, ITERATE, READ
+	}
 
-    private Evaluator evaluator = new Evaluator();
-    private Thread evalThread;
+	AtomicInteger operation = new AtomicInteger(0);
 
-    public SavvasParallelAdaptiveV4(){
-        this(State.LIST, true);
-    }
+	private CopyOnWriteArrayList<E> list = new CopyOnWriteArrayList<E>();
+	private ConcurrentHashMap<E, E> map = new ConcurrentHashMap<E, E>();
+	private State currentState;
+	private boolean switchable;
+	private boolean isSwitched = false;
 
-    public SavvasParallelAdaptiveV4(State state){
-        this(state, true);
-    }
+	private ConcurrentAddRemoveLog<E> switchLog = new ConcurrentAddRemoveLog<E>();
+	private ConcurrentAddRemoveLog<E> listApplyLog = new ConcurrentAddRemoveLog<E>();
+	private LogState logstate = LogState.INACTIVE;
 
-    public SavvasParallelAdaptiveV4(State state, boolean switchable){
-        list = new CopyOnWriteArrayList<E>();
-        map = new ConcurrentHashMap<E, E>();
-        currentState = state;
-        this.switchable = switchable;
-    }
+	private Evaluator evaluator = new Evaluator();
+	private Thread evalThread;
 
-    public void setup(E[] elementList) {
-        switch(currentState){
-            case LIST:
-                list.addAll(Arrays.asList(elementList));
-                break;
-            case MAP:
-                createMap(Arrays.asList(elementList));
+	public SavvasParallelAdaptiveV4() {
+		this(State.LIST, true);
+	}
+
+	public SavvasParallelAdaptiveV4(State state) {
+		this(state, true);
+	}
+
+	public SavvasParallelAdaptiveV4(State state, boolean switchable) {
+		currentState = state;
+		this.switchable = switchable;
+	}
+
+	public void setup(E[] elementList) {
+		switch (currentState) {
+		case LIST:
+			list.addAll(Arrays.asList(elementList));
+			break;
+		case MAP:
+			Arrays.asList(elementList).forEach(v -> map.put(v, v));
+			break;
+		default:
+			throw new RuntimeException("Invalid internal state");
+		}
+		if (switchable) {
+			evalThread = new Thread(evaluator);
+			evalThread.start();
+		}
+	}
+
+	public void stop() {
+		try {
+			evalThread.interrupt();
+		} catch (NullPointerException e) {
+		}
+	}
+
+	public void clear() {
+		operation.set(0);
+		list.clear();
+		map.clear();
+	}
+
+	public int size() {
+		int i = -1;
+		switch (currentState) {
+		case LIST:
+			i = list.size();
+			break;
+		case MAP:
+			i = map.size();
+			break;
+		default:
+			throw new RuntimeException("Invalid internal state");
+		}
+		return i;
+	}
+
+	public boolean hasSwitched() {
+		return isSwitched;
+	}
+
+	public void add(E element) { // WRITE-OPERATION-----------------------------------------------------------------------------------------------
+		switch (logstate) {
+		case INACTIVE:
+			addElement(element);
+			break;
+		case ACTIVE:
+			switchLog.add(element);
+			break;
+		case RELEASE:
+			switchLog.remove(element);
+			addElement(element);
+			break;
+		}
+		countOperation(OperationType.UPDATE);
+	}
+
+	private void addElement(E element) {
+		switch (currentState) {
+		case LIST:
+			list.add(element);
+			break;
+		case MAP:
+			map.put(element, element);
+			break;
+		default:
+			throw new RuntimeException("Invalid internal state");
+		}
+	}
+
+	public void remove(E element) { // WRITE-OPERATION-----------------------------------------------------------------------------------------------
+		switch (logstate) {
+		case INACTIVE:
+			removeElement(element);
+			break;
+		case ACTIVE:
+			switchLog.remove(element);
+			break;
+		case RELEASE:
+			switchLog.remove(element);
+			removeElement(element);
+			break;
+		}
+		countOperation(OperationType.UPDATE);
+	}
+
+	private void removeElement(E element) {
+		switch (currentState) {
+		case LIST:
+			list.remove(element);
+			break;
+		case MAP:
+			map.remove(element);
+			break;
+		default:
+			throw new RuntimeException("Invalid internal state");
+		}
+	}
+
+	public boolean contains(E element) {
+		Boolean b = false;
+		if (logstate != LogState.INACTIVE) // Check log, if not in log check DS
+			b = switchLog.isAdded(element);
+
+		if (!b) {
+			switch (currentState) {
+			case LIST:
+				b = list.contains(element);
+				if (logstate == LogState.RELEASE && !b) // If b is not found, and log is releasing, check the
+														// listApplyLog for added element
+					b = listApplyLog.isAdded(element);
 				break;
-        }
-        if (switchable) {
-            evalThread = new Thread(evaluator);
-            evalThread.start();
-        }
-    }
+			case MAP:
+				b = map.containsKey(element);
+				break;
+			default:
+				throw new RuntimeException("Invalid internal state");
+			}
+		}
+		countOperation(OperationType.READ);
+		return b;
+	}
 
-    public void stop(){
-        try {
-            evalThread.interrupt();
-        } catch (NullPointerException e) {}
-    }
+	@Override
+	public Iterator<E> iterator() {
+		Iterator<E> i;
+		switch (currentState) {
+		case LIST:
+			i = list.iterator();
+			break;
+		case MAP:
+			i = map.values().iterator();
+			break;
+		default:
+			throw new RuntimeException("Invalid internal state");
+		}
+		countOperation(OperationType.ITERATE);
+		return i;
+	}
 
-    public void clear(){
-        operation.set(0);
-        list.clear();
-        map.clear();
-    }
+	private void switchDS() {
+		isSwitched = true;
+		logstate = LogState.ACTIVE;
 
-    public int size(){
-        int i = -1;
-        switch(currentState) {
-            case LIST:
-                i = list.size(); break;
-            case MAP:
-                i = map.size(); break;
-        }
-        return i;
-    }
+		switch (currentState) {
+		case LIST:
+			parallelCreateMap(list);
+			currentState = State.MAP;
+			list.clear();
 
-    public boolean hasSwitched(){
-        return isSwitched;
-    }
+			applyAddLogMap();
+			applyRemoveLogMap();
 
-    public void add(E element){
-        lock.readLock().lock();
-        switch (currentState){
-            case LIST:
-                list.add(element);
-                break;
-            case MAP:
-                map.put(element, element);
-                break;
-            default:
-                throw new RuntimeException("Invalid state");
-        }
-        lock.readLock().unlock();
-        countOperation(OperationType.UPDATE);
-    }
+			break;
+		case MAP:
+			list.addAll(map.values());
+			currentState = State.LIST;
+			map.clear();
 
-    public void remove(E element){
-        lock.readLock().lock();
-        switch (currentState){
-            case LIST:
-                list.remove(element);
-                break;
-            case MAP:
-                map.remove(element);
-                break;
-            default:
-                throw new RuntimeException("Invalid state");
-        }
-        lock.readLock().unlock();
-        countOperation(OperationType.UPDATE);
-    }
+			applyAddLogList();
+			applyRemoveLogList();
 
-    public boolean contains(E element){
-        Boolean b;
-        switch (currentState){
-            case LIST:
-                b = list.contains(element);
-                break;
-            case MAP:
-                b = map.containsKey(element);
-                break;
-            default:
-                throw new RuntimeException("Invalid state");
-        }
-        countOperation(OperationType.READ);
-        return b;
-    }
+			break;
+		default:
+			throw new RuntimeException("Invalid internal state");
+		}
+	}
 
-    @Override
-    public Iterator<E> iterator() {
-        Iterator<E> i;
-        switch (currentState){
-            case LIST:
-                i =  list.iterator();
-                break;
-            case MAP:
-                i = map.values().iterator();
-                break;
-            default:
-                throw new RuntimeException("Invalid state");
-        }
-        countOperation(OperationType.ITERATE);
-        return i;
-    }
-
-    private void switchDS(){
-            lock.writeLock().lock();
-            isSwitched = true;
-            switch (currentState) {
-                case LIST:
-                    System.out.println("=======Switching to map=======");
-                    map.clear();
-					createMap(list);
-                    currentState = State.MAP;
-                    break;
-                case MAP:
-                    System.out.println("=======Switching to list=======");
-                    list.clear();
-					list.addAll(map.values());
-                    currentState = State.LIST;
-                    break;
-                default:
-                    throw new RuntimeException("Invalid state");
-            }
-            lock.writeLock().unlock();
-    }
-
-    private void countOperation(OperationType type){
-        if(switchable){
-            switch (type){
-                case READ:
-                case UPDATE:
-                    operation.decrementAndGet();
-                    break;
-                case ITERATE:
-                    operation.incrementAndGet();
-                    break;
-            }
-        }
-    }
-
-    public void setThreads(int threads){
-        this.threads = threads;
-    }
-
-	private void createMap(List<E> elementList) {
-		Map<E, E> newMap = elementList.stream().parallel().collect(Collectors.toMap(e -> e, e -> e, (Obj1, Obj2) -> Obj1));
+	private void parallelCreateMap(List<E> elementList) {
+		Map<E, E> newMap = elementList.stream().parallel()
+				.collect(Collectors.toConcurrentMap(e -> e, e -> e, (Obj1, Obj2) -> Obj1));
 		map.putAll(newMap);
 	}
 
+	private void applyAddLogMap() {
+		logstate = LogState.RELEASE;
+		E elm;
+		while (null != (elm = switchLog.pollRemoveLog()))
+			addElement(elm);
+	}
 
-    public void evaluateSwitch(){
-        if((operation.get() > SWITCH_THRESHOLD && currentState == State.MAP) || (currentState == State.MAP && threads <= 8)){
-            switchDS();
-        } else if (operation.get() < -SWITCH_THRESHOLD && currentState == State.LIST && threads > 8){
-            System.out.println("THREADS: " +threads);
-            switchDS();
-        }
-        operation.set(0);
-    }
+	private void applyAddLogList() {
+		logstate = LogState.RELEASE;
+		E elm;
+		while (null != (elm = switchLog.pollRemoveLog()))
+			listApplyLog.add(elm);
+		ConcurrentLinkedDeque<E> addLog = listApplyLog.getAndClearAddLog();
+		if (addLog != null)
+			list.addAll(listApplyLog.getAndClearAddLog());
+	}
 
-    private class Evaluator implements Runnable{
+	private void applyRemoveLogMap() {
+		E elm;
+		while (null != (elm = switchLog.pollRemoveLog()))
+			removeElement(elm);
+		logstate = LogState.INACTIVE;
+	}
 
-        @Override
-        public void run() {
-            while(true){
-                if(Thread.currentThread().isInterrupted())
-                    break;
-                try {
-                    Thread.sleep(5000);
-                    evaluateSwitch();
-                } catch (InterruptedException e) {
-                    break;
-                }
-            }
-        }
-    }
+	private void applyRemoveLogList() {
+		E elm;
+		while (null != (elm = switchLog.pollRemoveLog()))
+			listApplyLog.remove(elm);
+		ConcurrentLinkedDeque<E> remLog = listApplyLog.getAndClearRemoveLog();
+		if (remLog != null)
+			list.removeAll(remLog);
+		logstate = LogState.INACTIVE;
+	}
+
+	private void countOperation(OperationType type) {
+		if (switchable) {
+			switch (type) {
+			case READ:
+			case UPDATE:
+				operation.decrementAndGet();
+				break;
+			case ITERATE:
+				operation.incrementAndGet();
+				break;
+			}
+		}
+	}
+
+	public void setThreads(int threads) {
+		this.threads = threads;
+	}
+
+	public void evaluateSwitch() {
+		if ((operation.get() > SWITCH_THRESHOLD && currentState == State.MAP)
+				|| (currentState == State.MAP && threads <= 8)) {
+			switchDS();
+		} else if (operation.get() < -SWITCH_THRESHOLD && currentState == State.LIST && threads > 8) {
+			System.out.println("THREADS: " + threads);
+			switchDS();
+		}
+		operation.set(0);
+	}
+
+	private class Evaluator implements Runnable {
+
+		@Override
+		public void run() {
+			while (true) {
+				if (Thread.currentThread().isInterrupted())
+					break;
+				try {
+					Thread.sleep(5000);
+					evaluateSwitch();
+				} catch (InterruptedException e) {
+					break;
+				}
+			}
+		}
+	}
 
 }
-
-

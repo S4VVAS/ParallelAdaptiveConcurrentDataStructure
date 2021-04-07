@@ -105,6 +105,8 @@ public class OnlineAdaptiveConcurrentDataStructure<E> implements Iterable<E> {
         lock.readLock().unlock();
         countOperation(OperationType.UPDATE);
     }
+    
+    
 
     public void remove(E element){
         lock.readLock().lock();
