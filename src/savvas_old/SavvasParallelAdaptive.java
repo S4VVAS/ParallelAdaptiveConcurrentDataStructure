@@ -1,4 +1,4 @@
-package savvas;
+package savvas_old;
 
 //Version 3 of SavvasLogAdaptiveV2NoListLog
 
@@ -10,6 +10,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+
+import savvas.ConcurrentAddRemoveLogDEQ;
 
 public class SavvasParallelAdaptive<E> implements Iterable<E> {
 
@@ -41,8 +43,8 @@ public class SavvasParallelAdaptive<E> implements Iterable<E> {
 	private boolean switchable;
 	private boolean isSwitched = false;
 
-	private ConcurrentAddRemoveLog<E> switchLog = new ConcurrentAddRemoveLog<E>();
-	private ConcurrentAddRemoveLog<E> listApplyLog = new ConcurrentAddRemoveLog<E>();
+	private ConcurrentAddRemoveLogDEQ<E> switchLog = new ConcurrentAddRemoveLogDEQ<E>();
+	private ConcurrentAddRemoveLogDEQ<E> listApplyLog = new ConcurrentAddRemoveLogDEQ<E>();
 	private LogState logstate = LogState.INACTIVE;
 
 	private Boolean doNotApplyListLogRemove = false; // This var can only be modified by Eval thread

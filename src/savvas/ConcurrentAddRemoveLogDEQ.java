@@ -3,7 +3,7 @@ package savvas;
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public class ConcurrentAddRemoveLog<E> {
+public class ConcurrentAddRemoveLogDEQ<E> {
 
 	private ConcurrentLinkedDeque<E> add = new ConcurrentLinkedDeque<E>();
 	private ConcurrentLinkedDeque<E> remove = new ConcurrentLinkedDeque<E>();

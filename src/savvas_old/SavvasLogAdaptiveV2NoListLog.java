@@ -1,4 +1,4 @@
-package savvas;
+package savvas_old;
 
 import java.util.Arrays;
 import java.util.Iterator;
@@ -9,6 +9,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+
+import savvas.ConcurrentAddRemoveLogDEQ;
 
 public class SavvasLogAdaptiveV2NoListLog<E> implements Iterable<E> {
 
@@ -42,7 +44,7 @@ public class SavvasLogAdaptiveV2NoListLog<E> implements Iterable<E> {
 
 	// private ConcurrentLinkedDeque<E> addLog = new ConcurrentLinkedDeque<E>();
 //	private ConcurrentLinkedDeque<E> removeLog = new ConcurrentLinkedDeque<E>();
-	private ConcurrentAddRemoveLog<E> switchLog = new ConcurrentAddRemoveLog<E>();
+	private ConcurrentAddRemoveLogDEQ<E> switchLog = new ConcurrentAddRemoveLogDEQ<E>();
 	private LogState logstate = LogState.INACTIVE;
 
 	private Evaluator evaluator = new Evaluator();
