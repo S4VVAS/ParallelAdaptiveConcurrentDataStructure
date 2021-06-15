@@ -1,9 +1,11 @@
-package savvas;
+package savvas_old;
+
+//Savvas Giortsis
 
 import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-public class ConcurrentAddRemoveLogDEQ<E> {
+public class ConcurrentAddRemoveLog<E> {
 
 	private ConcurrentLinkedDeque<E> add = new ConcurrentLinkedDeque<E>();
 	private ConcurrentLinkedDeque<E> remove = new ConcurrentLinkedDeque<E>();
@@ -27,7 +29,7 @@ public class ConcurrentAddRemoveLogDEQ<E> {
 		case INACTIVE:
 			logRemove(elm);
 			break;
-		case ACTIVE: // When active, we use removeTemp for removes
+		case ACTIVE:
 			removeTemp.push(elm);
 			break;
 		}
@@ -38,13 +40,13 @@ public class ConcurrentAddRemoveLogDEQ<E> {
 		case INACTIVE:
 			logAdd(elm);
 			break;
-		case ACTIVE: // When active, we use addTemp for adds
+		case ACTIVE:
 			addTemp.push(elm);
 			break;
 		}
 	}
-	
-	public void clear(){
+
+	public void clear() {
 		add.clear();
 		remove.clear();
 		addTemp.clear();
@@ -66,12 +68,11 @@ public class ConcurrentAddRemoveLogDEQ<E> {
 		}
 
 	}
-	
-	
+
 	public E pollAddLog() {
 		return add.poll();
 	}
-	
+
 	public E pollRemoveLog() {
 		return remove.poll();
 	}
@@ -88,9 +89,8 @@ public class ConcurrentAddRemoveLogDEQ<E> {
 		return !add.isEmpty() || !remove.isEmpty();
 	}
 
-	public ConcurrentLinkedDeque<E> getAndClearAddLog() { // Returns null if unsuccessful/ no log items available
-		if (!addUpdate.compareAndSet(false, true)) { // compareAndExchange: Returns false if it succeeds to change (J8 compareAndSet)
-															// it to true.
+	public ConcurrentLinkedDeque<E> getAndClearAddLog() {
+		if (!addUpdate.compareAndSet(false, true)) {
 			if (!add.isEmpty()) {
 				addLogState = State.ACTIVE;
 				ConcurrentLinkedDeque<E> addC = add;
@@ -100,7 +100,7 @@ public class ConcurrentAddRemoveLogDEQ<E> {
 
 				addC.addAll(addTemp);
 				addTemp.clear();
-				
+
 				return addC;
 			}
 			addUpdate.set(false);
@@ -108,9 +108,8 @@ public class ConcurrentAddRemoveLogDEQ<E> {
 		return null;
 	}
 
-	public ConcurrentLinkedDeque<E> getAndClearRemoveLog() { // Returns null if unsuccessful/ no log items available
-		if (!removeUpdate.compareAndSet(false, true)) { // compareAndExchange: Returns false if it succeeds to
-																// change it to true. (J8 compareAndSet)
+	public ConcurrentLinkedDeque<E> getAndClearRemoveLog() {
+		if (!removeUpdate.compareAndSet(false, true)) {
 			if (!remove.isEmpty()) {
 				removeLogState = State.ACTIVE;
 				ConcurrentLinkedDeque<E> addC = add;

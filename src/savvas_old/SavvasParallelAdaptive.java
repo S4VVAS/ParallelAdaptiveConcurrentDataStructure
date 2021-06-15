@@ -11,8 +11,6 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
-import savvas.ConcurrentAddRemoveLogDEQ;
-
 public class SavvasParallelAdaptive<E> implements Iterable<E> {
 
 	private static final long SWITCH_THRESHOLD = 100;
@@ -43,8 +41,8 @@ public class SavvasParallelAdaptive<E> implements Iterable<E> {
 	private boolean switchable;
 	private boolean isSwitched = false;
 
-	private ConcurrentAddRemoveLogDEQ<E> switchLog = new ConcurrentAddRemoveLogDEQ<E>();
-	private ConcurrentAddRemoveLogDEQ<E> listApplyLog = new ConcurrentAddRemoveLogDEQ<E>();
+	private ConcurrentAddRemoveLog<E> switchLog = new ConcurrentAddRemoveLog<E>();
+	private ConcurrentAddRemoveLog<E> listApplyLog = new ConcurrentAddRemoveLog<E>();
 	private LogState logstate = LogState.INACTIVE;
 
 	private Boolean doNotApplyListLogRemove = false; // This var can only be modified by Eval thread

@@ -10,8 +10,6 @@ import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
-import savvas.ConcurrentAddRemoveLogDEQ;
-
 public class SavvasLogAdaptiveV2NoListLog<E> implements Iterable<E> {
 
 	private static final long SWITCH_THRESHOLD = 100;
@@ -44,7 +42,7 @@ public class SavvasLogAdaptiveV2NoListLog<E> implements Iterable<E> {
 
 	// private ConcurrentLinkedDeque<E> addLog = new ConcurrentLinkedDeque<E>();
 //	private ConcurrentLinkedDeque<E> removeLog = new ConcurrentLinkedDeque<E>();
-	private ConcurrentAddRemoveLogDEQ<E> switchLog = new ConcurrentAddRemoveLogDEQ<E>();
+	private ConcurrentAddRemoveLog<E> switchLog = new ConcurrentAddRemoveLog<E>();
 	private LogState logstate = LogState.INACTIVE;
 
 	private Evaluator evaluator = new Evaluator();

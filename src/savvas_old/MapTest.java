@@ -11,7 +11,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ForkJoinPool;
 import java.util.stream.Collectors;
 
-import savvas.SavvasParallelAdaptiveV3_2;
+import savvas.ParallelAdaptive;
 import onlineAdaptive.OnlineAdaptiveConcurrentDataStructure;
 
 
@@ -21,7 +21,7 @@ public class MapTest {
 	CopyOnWriteArrayList<Object> list = new CopyOnWriteArrayList<Object>();
 	ConcurrentLinkedDeque<Object> q = new ConcurrentLinkedDeque<Object>();
 	
-	int sizeOfDS = 150000;
+	int sizeOfDS = 8000000;
 	
 	public double m1() {
 		list.clear();
@@ -101,7 +101,7 @@ public class MapTest {
 	public double pa() {
 		list.clear();
 		
-		SavvasParallelAdaptiveV3_2<Object> map2 = new SavvasParallelAdaptiveV3_2<Object>(SavvasParallelAdaptiveV3_2.State.LIST, true);
+		ParallelAdaptive<Object> map2 = new ParallelAdaptive<Object>(ParallelAdaptive.State.LIST, true);
 		map2.setThreads(8);
 		
 		Thread one = new Thread(() -> {for(int i = 0; i < sizeOfDS/8 * 1; i++)map2.add(Integer.toString(i ));});

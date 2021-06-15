@@ -64,7 +64,6 @@ public class ConcurrentAddRemoveLogQ<E> {
 		if (!add.contains(elm)) {
 			add.offer(elm);
 		}
-
 	}
 	
 	

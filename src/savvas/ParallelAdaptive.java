@@ -1,19 +1,22 @@
 package savvas;
 
+//Savvas Giortsis
+
 import java.util.Arrays;
 import java.util.Iterator;
-import java.util.stream.*;
-
-
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.Map;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedDeque;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.ReentrantLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
 
-public class SavvasOnlineAdaptiveModif<E> implements Iterable<E> {
+import javax.swing.plaf.synth.SynthProgressBarUI;
+
+import savvas_old.ConcurrentAddRemoveLog;
+
+public class ParallelAdaptive<E> implements Iterable<E> {
 
 	private static final long SWITCH_THRESHOLD = 100;
 	private int threads = 100;
@@ -21,39 +24,41 @@ public class SavvasOnlineAdaptiveModif<E> implements Iterable<E> {
 	public enum State {
 		LIST, MAP
 	}
-
-	private enum OperationType {
-		UPDATE, ITERATE, READ
-	}
+	
+	private boolean d = Boolean.T
 
 	private enum LogState {
 		INACTIVE, ACTIVE, RELEASE
 	}
 
-	AtomicInteger operation = new AtomicInteger(0);
+	private enum OperationType {
+		UPDATE, ITERATE, READ
+	}
 
-	private ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
-	private ReentrantLock evaluateLock = new ReentrantLock();
+	AtomicInteger operation = new AtomicInteger(0);
 
 	private CopyOnWriteArrayList<E> list;
 	private ConcurrentHashMap<E, E> map;
 	private State currentState;
-	private LogState logState = LogState.INACTIVE;
 	private boolean switchable;
 	private boolean isSwitched = false;
+
+	private ConcurrentAddRemoveLog<E> switchLog = new ConcurrentAddRemoveLog<E>();
+	private ConcurrentAddRemoveLog<E> listApplyLog = new ConcurrentAddRemoveLog<E>();
+	private LogState logstate = LogState.INACTIVE;
 
 	private Evaluator evaluator = new Evaluator();
 	private Thread evalThread;
 
-	public SavvasOnlineAdaptiveModif() {
+	public ParallelAdaptive() {
 		this(State.LIST, true);
 	}
 
-	public SavvasOnlineAdaptiveModif(State state) {
+	public ParallelAdaptive(State state) {
 		this(state, true);
 	}
 
-	public SavvasOnlineAdaptiveModif(State state, boolean switchable) {
+	public ParallelAdaptive(State state, boolean switchable) {
 		list = new CopyOnWriteArrayList<E>();
 		map = new ConcurrentHashMap<E, E>();
 		currentState = state;
@@ -66,7 +71,7 @@ public class SavvasOnlineAdaptiveModif<E> implements Iterable<E> {
 			list.addAll(Arrays.asList(elementList));
 			break;
 		case MAP:
-			createMap(Arrays.asList(elementList));
+			parallelCreateMap(Arrays.asList(elementList));
 			break;
 		}
 		if (switchable) {
@@ -84,6 +89,8 @@ public class SavvasOnlineAdaptiveModif<E> implements Iterable<E> {
 
 	public void clear() {
 		operation.set(0);
+		switchLog.clear();
+		listApplyLog.clear();
 		list.clear();
 		map.clear();
 	}
@@ -97,6 +104,8 @@ public class SavvasOnlineAdaptiveModif<E> implements Iterable<E> {
 		case MAP:
 			i = map.size();
 			break;
+		default:
+			throw new RuntimeException("Invalid internal state");
 		}
 		return i;
 	}
@@ -106,24 +115,22 @@ public class SavvasOnlineAdaptiveModif<E> implements Iterable<E> {
 	}
 
 	public void add(E element) {
-		switch (logState) {
+		switch (logstate) {
 		case INACTIVE:
-			logState = LogState.ACTIVE;
-			addElm(element);
+			addElement(element);
 			break;
 		case ACTIVE:
-			logState = LogState.RELEASE;
-			addElm(element);
+			switchLog.add(element);
 			break;
 		case RELEASE:
-			logState = LogState.INACTIVE;
-			addElm(element);
+			switchLog.remove(element);
+			addElement(element);
 			break;
 		}
+		countOperation(OperationType.UPDATE);
 	}
 
-	private void addElm(E element) {
-		lock.readLock().lock();
+	private void addElement(E element) {
 		switch (currentState) {
 		case LIST:
 			list.add(element);
@@ -132,31 +139,27 @@ public class SavvasOnlineAdaptiveModif<E> implements Iterable<E> {
 			map.put(element, element);
 			break;
 		default:
-			throw new RuntimeException("Invalid state");
+			throw new RuntimeException("Invalid internal state");
 		}
-		lock.readLock().unlock();
-		countOperation(OperationType.UPDATE);
 	}
 
 	public void remove(E element) {
-		switch (logState) {
+		switch (logstate) {
 		case INACTIVE:
-			removeElm(element);
-			logState = LogState.ACTIVE;
+			removeElement(element);
 			break;
 		case ACTIVE:
-			removeElm(element);
-			logState = LogState.RELEASE;
+			switchLog.remove(element);
 			break;
 		case RELEASE:
-			removeElm(element);
-			logState = LogState.INACTIVE;
+			switchLog.remove(element);
+			removeElement(element);
 			break;
 		}
+		countOperation(OperationType.UPDATE);
 	}
 
-	private void removeElm(E element) {
-		lock.readLock().lock();
+	private void removeElement(E element) {
 		switch (currentState) {
 		case LIST:
 			list.remove(element);
@@ -165,31 +168,29 @@ public class SavvasOnlineAdaptiveModif<E> implements Iterable<E> {
 			map.remove(element);
 			break;
 		default:
-			throw new RuntimeException("Invalid state");
+			throw new RuntimeException("Invalid internal state");
 		}
-		lock.readLock().unlock();
-		countOperation(OperationType.UPDATE);
 	}
 
 	public boolean contains(E element) {
 		Boolean b = false;
+		if (logstate != LogState.INACTIVE)
+			b = switchLog.isAdded(element);
 
-		if (logState != LogState.INACTIVE)
-			b = false;
-
-		if (!b)
+		if (!b) {
 			switch (currentState) {
 			case LIST:
 				b = list.contains(element);
-				if (logState == LogState.RELEASE && !b)
-					logState = LogState.INACTIVE;
+				if (logstate == LogState.RELEASE && !b)
+					b = listApplyLog.isAdded(element);
 				break;
 			case MAP:
 				b = map.containsKey(element);
 				break;
 			default:
-				throw new RuntimeException("Invalid state");
+				throw new RuntimeException("Invalid internal state");
 			}
+		}
 		countOperation(OperationType.READ);
 		return b;
 	}
@@ -205,32 +206,78 @@ public class SavvasOnlineAdaptiveModif<E> implements Iterable<E> {
 			i = map.values().iterator();
 			break;
 		default:
-			throw new RuntimeException("Invalid state");
+			throw new RuntimeException("Invalid internal state");
 		}
 		countOperation(OperationType.ITERATE);
 		return i;
 	}
 
 	private void switchDS() {
-		lock.writeLock().lock();
 		isSwitched = true;
+		logstate = LogState.ACTIVE;
+
 		switch (currentState) {
 		case LIST:
-			System.out.println("=======Switching to map=======");
-			map.clear();
-			createMap(list);
+			parallelCreateMap(list);
 			currentState = State.MAP;
+			list.clear();
+
+			applyAddLogMap();
+			applyRemoveLogMap();
+
 			break;
 		case MAP:
-			System.out.println("=======Switching to list=======");
-			list.clear();
 			list.addAll(map.values());
 			currentState = State.LIST;
+			map.clear();
+
+			applyAddLogList();
+			applyRemoveLogList();
+
 			break;
 		default:
-			throw new RuntimeException("Invalid state");
+			throw new RuntimeException("Invalid internal state");
 		}
-		lock.writeLock().unlock();
+	}
+
+	private void parallelCreateMap(List<E> elementList) {
+		Map<E, E> newMap = elementList.stream().parallel()
+				.collect(Collectors.toConcurrentMap(e -> e, e -> e, (Obj1, Obj2) -> Obj1));
+		map.putAll(newMap);
+	}
+
+	private void applyAddLogMap() {
+		logstate = LogState.RELEASE;
+		E elm;
+		while (null != (elm = switchLog.pollRemoveLog()))
+			addElement(elm);
+	}
+
+	private void applyAddLogList() {
+		logstate = LogState.RELEASE;
+		E elm;
+		while (null != (elm = switchLog.pollRemoveLog()))
+			listApplyLog.add(elm);
+		ConcurrentLinkedDeque<E> addLog = listApplyLog.getAndClearAddLog();
+		if (addLog != null)
+			list.addAll(listApplyLog.getAndClearAddLog());
+	}
+
+	private void applyRemoveLogMap() {
+		E elm;
+		while (null != (elm = switchLog.pollRemoveLog()))
+			removeElement(elm);
+		logstate = LogState.INACTIVE;
+	}
+
+	private void applyRemoveLogList() {
+		E elm;
+		while (null != (elm = switchLog.pollRemoveLog()))
+			listApplyLog.remove(elm);
+		ConcurrentLinkedDeque<E> remLog = listApplyLog.getAndClearRemoveLog();
+		if (remLog != null)
+			list.removeAll(remLog);
+		logstate = LogState.INACTIVE;
 	}
 
 	private void countOperation(OperationType type) {
@@ -251,18 +298,11 @@ public class SavvasOnlineAdaptiveModif<E> implements Iterable<E> {
 		this.threads = threads;
 	}
 
-	private void createMap(List<E> elementList) {
-		Map<E, E> newMap = elementList.stream().parallel()
-				.collect(Collectors.toMap(e -> e, e -> e, (Obj1, Obj2) -> Obj1));
-		map.putAll(newMap);
-	}
-
 	public void evaluateSwitch() {
 		if ((operation.get() > SWITCH_THRESHOLD && currentState == State.MAP)
 				|| (currentState == State.MAP && threads <= 8)) {
 			switchDS();
 		} else if (operation.get() < -SWITCH_THRESHOLD && currentState == State.LIST && threads > 8) {
-			System.out.println("THREADS: " + threads);
 			switchDS();
 		}
 		operation.set(0);
